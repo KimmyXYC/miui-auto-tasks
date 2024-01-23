@@ -14,10 +14,14 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from pydantic import ValidationError
 from tenacity import RetryError, Retrying, stop_after_attempt
 
-from .captcha import get_validate
+from .captcha import get_validate_by_2captcha, get_validate_by_eee
 from .data_model import TokenResultHandler
 from .logger import log
 from .request import post
+
+from twocaptcha import TwoCaptcha
+from .config import ConfigManager
+_conf = ConfigManager.data_obj
 
 PUBLIC_KEY_PEM = '''-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArxfNLkuAQ/BYHzkzVwtu
@@ -95,14 +99,20 @@ def is_incorrect_return(exception: Exception, *addition_exceptions: Type[Excepti
     return isinstance(exception, exceptions) or isinstance(exception.__cause__, exceptions)
 
 
-async def get_token_by_captcha(url: str) -> str | bool:
+async def get_token_by_captcha(url: str,use_2captcha: bool) -> str | bool:
     """通过人机验证码获取TOKEN"""
     try:
         parsed_url = urlparse(url)
         query_params = dict(parse_qsl(parsed_url.query))  # 解析URL参数
         gt = query_params.get("c")  # pylint: disable=invalid-name
         challenge = query_params.get("l")
-        geetest_data = await get_validate(gt, challenge)
+        if use_2captcha:
+            log.info("尝试使用2captcha获取token")
+            solver = TwoCaptcha(_conf.preference.twocaptcha_api_key)
+            geetest_data = await get_validate_by_2captcha(gt, challenge ,url)
+        else:
+            log.info("尝试使用eee的打码平台获取token")
+            geetest_data = await get_validate_by_eee(gt, challenge)
         params = {
             'k': '3dc42a135a8d45118034d1ab68213073',
             'locale': 'zh_CN',
@@ -121,12 +131,38 @@ async def get_token_by_captcha(url: str) -> str | bool:
         result = response.json()
         api_data = TokenResultHandler(result)
         if api_data.success:
+            if use_2captcha:
+                try:
+                    solver.report(geetest_data.taskId,True)
+                    log.success("成功使用2captcha获取token并反馈")
+                except Exception:
+                    pass
+            else:
+                log.success("使用eee的打码平台成功获取token")
             return api_data.token
         elif not api_data.data.get("result"):
             log.error("遇到人机验证码，无法获取TOKEN")
+            log.debug("接口返回："+str(response.text))
+            if use_2captcha:
+                try:
+                    solver.report(geetest_data.taskId,False)
+                    log.info("已向2captcha反馈失败情况")
+                except Exception:
+                    pass
+            else:
+                log.info("使用eee的打码平台获取token失败")
             return False
         else:
             log.error("遇到未知错误，无法获取TOKEN")
+            log.debug("接口返回："+str(response.text))
+            if use_2captcha and geetest_data.taskId:
+                try:
+                    solver.report(geetest_data.taskId,False)
+                    log.info("已向2captcha反馈失败情况")
+                except Exception:
+                    pass
+            else:
+                log.info("使用eee的打码平台获取token失败")
             return False
     except Exception:  # pylint: disable=broad-exception-caught
         log.exception("获取TOKEN异常")
@@ -137,8 +173,12 @@ async def get_token_by_captcha(url: str) -> str | bool:
 async def get_token(uid: str) -> str | bool:
     """获取TOKEN"""
     try:
-        for attempt in Retrying(stop=stop_after_attempt(3)):
+        counter = 0
+        for attempt in Retrying(stop=stop_after_attempt(20)):
             with attempt:
+                counter += 1
+                use_2captcha = counter <= 10
+                # use_2captcha = counter > 10
                 data = {
                     "type": 0,
                     "startTs": round(time.time() * 1000),
@@ -228,7 +268,7 @@ async def get_token(uid: str) -> str | bool:
                 elif api_data.need_verify:
                     log.error("遇到人机验证码, 尝试调用解决方案")
                     url = api_data.data.get("url")
-                    if token := await get_token_by_captcha(url):
+                    if token := await get_token_by_captcha(url,use_2captcha):
                         return token
                     else:
                         raise ValueError("人机验证失败")
