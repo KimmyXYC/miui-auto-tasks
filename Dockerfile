@@ -2,15 +2,13 @@ FROM python:alpine
 
 RUN apk add --no-cache gcc musl-dev python3-dev libffi-dev
 
-RUN pip install --no-cache-dir pdm
-
 WORKDIR /srv
 
 COPY ./utils ./utils
 
-COPY ./pyproject.toml ./pdm.lock ./miuitask.py ./docker_start.sh ./
+COPY ./requirements.txt ./pdm.lock ./miuitask.py ./docker_start.sh ./
 
-RUN pdm install --prod && \
+RUN pip install -r ./requirements.txt && \
     echo "0 4 * * * cd /srv && pdm run /srv/miuitask.py" > /var/spool/cron/crontabs/root && \
     chmod +x docker_start.sh
 
