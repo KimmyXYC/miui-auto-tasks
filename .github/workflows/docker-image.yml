@@ -22,6 +22,8 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0  # 确保获取完整的 Git 历史和所有分支
+          ref: ${{ github.ref }}
+
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -50,8 +52,8 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}:latest
 #            ${{ env.DOCKERHUB_REPO }}:${{ github.event.release.tag_name }}
-          build_args: |
-            GIT_REF=${{ github.ref }}
+#          build_args: |
+#            GIT_REF=${{ github.ref }}
 
   build_armv7:
     runs-on: ubuntu-latest
@@ -86,8 +88,8 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}:latest
 #            ${{ env.DOCKERHUB_REPO }}:${{ github.event.release.tag_name }}
-          build_args: |
-            GIT_REF=${{ github.ref }}
+#          build_args: |
+#            GIT_REF=${{ github.ref }}
 
 
 
