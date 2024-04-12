@@ -1,6 +1,8 @@
 FROM python:3.11
 
-RUN apk add --no-cache gcc g++ musl-dev python3-dev libffi-dev rust rustc cargo pkgconfig libressl-dev
+#RUN apt install --no-cache gcc g++ musl-dev python3-dev libffi-dev rust rustc cargo pkgconfig libressl-dev
+RUN apt-get update && apt-get install -y build-essential cargo rustc
+
 
 RUN pip install --no-cache-dir pdm
 
