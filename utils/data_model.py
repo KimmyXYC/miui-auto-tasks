@@ -9,7 +9,7 @@ class ApiResultHandler(BaseModel):
     """
     content: Dict[str, Any]
     """API返回的JSON对象序列化以后的Dict对象"""
-    data: Dict[str, Any] = {}
+    data: Optional[Dict[str, Any]] = None
     """API返回的数据体"""
     message: str = ""
     """API返回的消息内容"""
@@ -20,8 +20,8 @@ class ApiResultHandler(BaseModel):
         super().__init__(content=content)
 
         for key in ["data", "entity"]:
-            if self.data == {}:
-                self.data = self.content.get(key, {})
+            if self.data is None:
+                self.data = self.content.get(key)
             else:
                 break
 
@@ -31,7 +31,7 @@ class ApiResultHandler(BaseModel):
                 if self.status is None and isinstance(self.data, dict):
                     self.status = self.data.get(key)
 
-        for key in ["desc", "message"]:
+        for key in ["msg","desc", "message"]:
             if self.message == "":
                 self.message = self.content.get(key, "")
                 if self.message is None and isinstance(self.data, dict):
@@ -42,7 +42,7 @@ class ApiResultHandler(BaseModel):
         """
         是否成功
         """
-        return (self.status in [0, 200] or self.message in ["成功", "OK", "success"]) and not self.content.get("notificationUrl")
+        return (self.status in [0, 1, 200] or self.message in ["成功", "OK", "success", "提交成功", "识别成功"]) and not self.content.get("notificationUrl")
 
 
 class LoginResultHandler(ApiResultHandler):
@@ -151,6 +151,7 @@ class GeetestResult(NamedTuple):
     """人机验证结果数据"""
     validate: str
     challenge: str
+    taskId: str = ""
 
 class UserInfoResult(BaseModel):
     """用户信息数据"""
